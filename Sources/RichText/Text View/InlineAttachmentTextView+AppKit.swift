@@ -70,8 +70,11 @@ extension InlineAttachmentTextView {
     }
     
     /// AppKit tracks the selection inside `mouseDown`, so a click is known
-    /// once it returns: one click that selected nothing, off links and inline views.
+    /// once it returns: one click that selected nothing, off links and inline
+    /// views, and not followed by a second that makes it a double click.
     override func mouseDown(with event: NSEvent) {
+        pendingClick?.cancel()
+        pendingClick = nil
         super.mouseDown(with: event)
 
         guard let onClick,
@@ -86,7 +89,12 @@ extension InlineAttachmentTextView {
             return
         }
 
-        onClick(characterIndexForInsertion(at: convert(event.locationInWindow, from: nil)))
+        let offset = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        pendingClick = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(NSEvent.doubleClickInterval))
+            guard !Task.isCancelled, let self, self.selectedRange().length == 0 else { return }
+            onClick(offset)
+        }
     }
 
     // FIXME: This only works for "Copy" and "Search with Google".

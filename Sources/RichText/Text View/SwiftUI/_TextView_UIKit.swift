@@ -77,6 +77,9 @@ struct _TextView_UIKit: UIViewRepresentable {
         var renderedText = AttributedString()
         private var tapAction: (@MainActor (AttributedString, AttributedString.Index) -> Void)?
         private var tapRecognizer: UITapGestureRecognizer?
+        /// Only there to fail: a tap waits for it, so a double tap that
+        /// selects a word is not also reported as a tap.
+        private var doubleTapRecognizer: UITapGestureRecognizer?
         
         init(_ parent: _TextView_UIKit) {
             self.parent = parent
@@ -88,13 +91,22 @@ struct _TextView_UIKit: UIViewRepresentable {
             guard let textView else { return }
 
             if action != nil, tapRecognizer == nil {
+                let doubleTap = UITapGestureRecognizer()
+                doubleTap.numberOfTapsRequired = 2
+                doubleTap.delegate = self
+                textView.addGestureRecognizer(doubleTap)
+                doubleTapRecognizer = doubleTap
+
                 let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
                 recognizer.delegate = self
+                recognizer.require(toFail: doubleTap)
                 textView.addGestureRecognizer(recognizer)
                 tapRecognizer = recognizer
             } else if action == nil, let recognizer = tapRecognizer {
                 textView.removeGestureRecognizer(recognizer)
+                doubleTapRecognizer.map(textView.removeGestureRecognizer)
                 tapRecognizer = nil
+                doubleTapRecognizer = nil
             }
         }
 

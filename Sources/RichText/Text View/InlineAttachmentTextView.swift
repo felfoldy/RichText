@@ -15,6 +15,8 @@ final class InlineAttachmentTextView: PlatformTextView {
     var cachedContentHeightWidth: CGFloat?
     /// A click's insertion point, as a UTF-16 offset. See `onTextTap`.
     var onClick: ((Int) -> Void)?
+    /// A click waiting out the double-click interval.
+    var pendingClick: Task<Void, Never>?
     
     func replaceAttachmentWithEquivalentText(
         in attributedString: NSAttributedString
