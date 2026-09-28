@@ -69,6 +69,26 @@ extension InlineAttachmentTextView {
         return bounds.height
     }
     
+    /// AppKit tracks the selection inside `mouseDown`, so a click is known
+    /// once it returns: one click that selected nothing, off links and inline views.
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+
+        guard let onClick,
+              event.clickCount == 1,
+              selectedRange().length == 0,
+              let window else { return }
+
+        let screenPoint = window.convertPoint(toScreen: event.locationInWindow)
+        let character = characterIndex(for: screenPoint)
+        if character != NSNotFound, character < attributedString().length,
+           NSAttributedString.Key.ownsTaps(attributedString().attributes(at: character, effectiveRange: nil)) {
+            return
+        }
+
+        onClick(characterIndexForInsertion(at: convert(event.locationInWindow, from: nil)))
+    }
+
     // FIXME: This only works for "Copy" and "Search with Google".
     // Lookup, Translate, Share are using original strings
     override func attributedSubstring(

@@ -46,9 +46,18 @@ struct _TextView_AppKit: NSViewRepresentable {
             textView,
             configuration: configuration
         )
-        textView.applyAttributedStringPreservingAttachments(
-            content.attributedString(configuration: configuration)
-        )
+        let attributedString = content.attributedString(configuration: configuration)
+        textView.applyAttributedStringPreservingAttachments(attributedString)
+
+        // The storage only keeps the attributes it draws, so the caller is
+        // handed the text it gave, which still carries its own.
+        if let action = context.environment.textTapAction {
+            textView.onClick = { offset in
+                action(attributedString, attributedString.characterIndex(atUTF16Offset: offset))
+            }
+        } else {
+            textView.onClick = nil
+        }
     }
     
     final class Coordinator: NSObject, NSTextViewDelegate {

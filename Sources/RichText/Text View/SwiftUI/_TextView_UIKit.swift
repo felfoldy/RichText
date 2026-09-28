@@ -41,9 +41,11 @@ struct _TextView_UIKit: UIViewRepresentable {
             textView,
             configuration: configuration
         )
-        textView.applyAttributedStringPreservingAttachments(
-            content.attributedString(configuration: configuration)
-        )
+        let attributedString = content.attributedString(configuration: configuration)
+        textView.applyAttributedStringPreservingAttachments(attributedString)
+
+        context.coordinator.renderedText = attributedString
+        context.coordinator.setTapAction(context.environment.textTapAction)
     }
     
     // For UITextView, it comes with a UIScrollView
@@ -66,13 +68,61 @@ struct _TextView_UIKit: UIViewRepresentable {
         )
     }
     
-    final class Coordinator: NSObject, UITextViewDelegate, UITextDragDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UITextDragDelegate, UIGestureRecognizerDelegate {
         var parent: _TextView_UIKit
         weak var textView: InlineAttachmentTextView?
         var editMenuInteraction: UIEditMenuInteraction?
+        /// What the text view was last given, which still carries the caller's
+        /// own attributes; the view's storage only keeps the ones it draws.
+        var renderedText = AttributedString()
+        private var tapAction: (@MainActor (AttributedString, AttributedString.Index) -> Void)?
+        private var tapRecognizer: UITapGestureRecognizer?
         
         init(_ parent: _TextView_UIKit) {
             self.parent = parent
+        }
+
+        /// Installs the recognizer only while someone listens.
+        func setTapAction(_ action: (@MainActor (AttributedString, AttributedString.Index) -> Void)?) {
+            tapAction = action
+            guard let textView else { return }
+
+            if action != nil, tapRecognizer == nil {
+                let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+                recognizer.delegate = self
+                textView.addGestureRecognizer(recognizer)
+                tapRecognizer = recognizer
+            } else if action == nil, let recognizer = tapRecognizer {
+                textView.removeGestureRecognizer(recognizer)
+                tapRecognizer = nil
+            }
+        }
+
+        @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended,
+                  let textView,
+                  let tapAction else { return }
+
+            let point = recognizer.location(in: textView)
+            if let characterRange = textView.characterRange(at: point) {
+                let location = textView.offset(from: textView.beginningOfDocument, to: characterRange.start)
+                if location >= 0, location < textView.attributedText.length,
+                   NSAttributedString.Key.ownsTaps(textView.attributedText.attributes(at: location, effectiveRange: nil)) {
+                    return
+                }
+            }
+
+            guard let position = textView.closestPosition(to: point) else { return }
+            let offset = textView.offset(from: textView.beginningOfDocument, to: position)
+            tapAction(renderedText, renderedText.characterIndex(atUTF16Offset: offset))
+        }
+
+        // Alongside the text view's own taps, which place and clear selection.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
         }
         
         func textDraggableView(

@@ -13,6 +13,8 @@ final class InlineAttachmentTextView: PlatformTextView {
     var inlineAttachmentRangesByID: [AnyHashable: NSRange] = [:]
     var cachedContentHeight: CGFloat?
     var cachedContentHeightWidth: CGFloat?
+    /// A click's insertion point, as a UTF-16 offset. See `onTextTap`.
+    var onClick: ((Int) -> Void)?
     
     func replaceAttachmentWithEquivalentText(
         in attributedString: NSAttributedString
